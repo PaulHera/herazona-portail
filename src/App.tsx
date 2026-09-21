@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
+import FicheEditorPage from './pages/FicheEditorPage'
 
 function AppRoutes() {
   const { gerant, loading } = useAuth()
@@ -25,8 +26,8 @@ function AppRoutes() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<HomePage />} />
-        <Route path="/fiche" element={<div style={{ color: '#8A877F', fontFamily: "'GillSans', sans-serif" }}>Ma fiche — bientot disponible</div>} />
-        <Route path="/fiche/:id" element={<div style={{ color: '#8A877F', fontFamily: "'GillSans', sans-serif" }}>Edition de fiche — bientot disponible</div>} />
+        <Route path="/fiche" element={<FicheEditorPage />} />
+        <Route path="/fiche/:id" element={<FicheEditorPage />} />
         <Route path="/stats" element={<div style={{ color: '#8A877F', fontFamily: "'GillSans', sans-serif" }}>Stats — bientot disponible</div>} />
         <Route path="/avis" element={<div style={{ color: '#8A877F', fontFamily: "'GillSans', sans-serif" }}>Avis — bientot disponible</div>} />
       </Route>

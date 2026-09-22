@@ -6,8 +6,9 @@ import HomePage from './pages/HomePage'
 import FicheEditorPage from './pages/FicheEditorPage'
 import StatsPage from './pages/StatsPage'
 import AvisPage from './pages/AvisPage'
+import ClaimPage from './pages/ClaimPage'
 
-function AppRoutes() {
+function AuthenticatedRoutes() {
   const { gerant, loading } = useAuth()
 
   if (loading) {
@@ -25,22 +26,26 @@ function AppRoutes() {
   if (!gerant) return <LoginPage />
 
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/fiche" element={<FicheEditorPage />} />
-        <Route path="/fiche/:id" element={<FicheEditorPage />} />
-        <Route path="/stats" element={<StatsPage />} />
-        <Route path="/avis" element={<AvisPage />} />
-      </Route>
-    </Routes>
+    <Layout />
   )
 }
 
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <Routes>
+        {/* Page publique : revendication (pas besoin d'être connecté) */}
+        <Route path="/revendiquer" element={<ClaimPage />} />
+
+        {/* Routes authentifiées */}
+        <Route element={<AuthenticatedRoutes />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/fiche" element={<FicheEditorPage />} />
+          <Route path="/fiche/:id" element={<FicheEditorPage />} />
+          <Route path="/stats" element={<StatsPage />} />
+          <Route path="/avis" element={<AvisPage />} />
+        </Route>
+      </Routes>
     </AuthProvider>
   )
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, formatError } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { Eye, MousePointer, Star, TrendingUp, Calendar } from 'lucide-react'
+import { Eye, MousePointer, Star, Calendar } from 'lucide-react'
 
 const NAVY = '#1B2A4A'
 const GOLD = '#C9A84C'

@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
 import FicheEditorPage from './pages/FicheEditorPage'
 import StatsPage from './pages/StatsPage'
+import AvisPage from './pages/AvisPage'
 
 function AppRoutes() {
   const { gerant, loading } = useAuth()
@@ -30,7 +31,7 @@ function AppRoutes() {
         <Route path="/fiche" element={<FicheEditorPage />} />
         <Route path="/fiche/:id" element={<FicheEditorPage />} />
         <Route path="/stats" element={<StatsPage />} />
-        <Route path="/avis" element={<div style={{ color: '#8A877F', fontFamily: "'GillSans', sans-serif" }}>Avis — bientot disponible</div>} />
+        <Route path="/avis" element={<AvisPage />} />
       </Route>
     </Routes>
   )

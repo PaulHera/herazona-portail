@@ -94,6 +94,15 @@ export default function FicheEditorPage() {
   // Tarifs
   const [tarifs, setTarifs] = useState<{ libelle: string; prix: string; mis_en_avant: boolean }[]>([])
 
+  // Photos
+  const [photos, setPhotos] = useState<{ id: string; storage_path: string; role: string; status: string }[]>([])
+  const [currentCover, setCurrentCover] = useState<string | null>(null) // photo_couverture actuelle (approved)
+  const [currentGalerie, setCurrentGalerie] = useState<string[]>([]) // photos[] actuelles (approved)
+  const [uploading, setUploading] = useState(false)
+  const MAX_PHOTOS = 10
+  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+  const MAX_SIZE = 5 * 1024 * 1024 // 5 Mo
+
   // Adresses supplémentaires
   const [adresses, setAdresses] = useState<{ label: string; adresse: string; latitude: number | null; longitude: number | null }[]>([])
   const [adresseQueries, setAdresseQueries] = useState<string[]>([])
@@ -133,6 +142,19 @@ export default function FicheEditorPage() {
           setAdresses(data.adresses.map((a: any) => ({ label: a.label || '', adresse: a.adresse || '', latitude: a.latitude, longitude: a.longitude })))
           setAdresseQueries(data.adresses.map((a: any) => a.adresse || ''))
         }
+
+        // Photos actuelles (publiées) + en attente
+        setCurrentCover(data.photo_couverture || null)
+        setCurrentGalerie(data.photos || [])
+
+        // Charger les photos en attente de modération
+        const { data: pendingPhotos } = await supabase
+          .from('page_photos')
+          .select('id, storage_path, role, status')
+          .eq('page_id', pageId)
+          .in('status', ['pending', 'approved'])
+          .order('created_at')
+        if (pendingPhotos) setPhotos(pendingPhotos)
       } catch (err) {
         setError(formatError(err))
       }
@@ -161,6 +183,58 @@ export default function FicheEditorPage() {
     const v = sg.address.city || sg.address.town || sg.address.village || sg.address.municipality || ''
     setAdresseQuery(sg.display_name); setLatitude(parseFloat(sg.lat)); setLongitude(parseFloat(sg.lon)); setVille(v)
     setShowSuggestions(false); setSuggestions([])
+  }
+
+  // ── Photos upload ──────────────────────────────────────────────────────────
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})
+  const resolveUrl = async (path: string) => {
+    if (!path || path.startsWith('http')) return path
+    if (signedUrls[path]) return signedUrls[path]
+    const { data } = await supabase.storage.from('Photos').createSignedUrl(path, 3600)
+    if (data?.signedUrl) { setSignedUrls(prev => ({ ...prev, [path]: data.signedUrl })); return data.signedUrl }
+    return ''
+  }
+  // Resolve URLs on load
+  useEffect(() => {
+    const paths = [currentCover, ...currentGalerie, ...photos.map(p => p.storage_path)].filter(Boolean) as string[]
+    paths.forEach(p => resolveUrl(p))
+  }, [currentCover, currentGalerie, photos])
+
+  const getPreview = (path: string) => {
+    if (!path) return ''
+    if (path.startsWith('http')) return path
+    return signedUrls[path] || ''
+  }
+
+  const handlePhotoUpload = async (file: File, role: 'couverture' | 'galerie') => {
+    if (!ALLOWED_TYPES.includes(file.type)) { setError('Format accepte : JPG, PNG ou WebP'); return }
+    if (file.size > MAX_SIZE) { setError('Taille max : 5 Mo'); return }
+
+    const pendingCount = photos.filter(p => p.status !== 'rejected').length
+    if (pendingCount >= MAX_PHOTOS) { setError('Limite de 10 photos atteinte'); return }
+
+    setUploading(true); setError(null)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Session expirée — reconnecte-toi')
+
+      const ext = file.name.split('.').pop() || 'jpg'
+      const path = `${user.id}/fiches/${pageId}/${Date.now()}.${ext}`
+
+      const { error: uploadErr } = await supabase.storage.from('Photos').upload(path, file, { upsert: true })
+      if (uploadErr) throw uploadErr
+
+      const { data: photoId, error: regErr } = await supabase.rpc('gerant_register_photo', {
+        p_page_id: pageId, p_storage_path: path, p_role: role,
+      })
+      if (regErr) throw regErr
+
+      setPhotos(prev => [...prev, { id: photoId, storage_path: path, role, status: 'pending' }])
+      resolveUrl(path)
+    } catch (err) {
+      setError(formatError(err))
+    }
+    setUploading(false)
   }
 
   // ── Nominatim (adresses supplémentaires) ──────────────────────────────────
@@ -283,6 +357,60 @@ export default function FicheEditorPage() {
           <Field label="Offre essai">
             <input style={s.input} value={offreEssai} onChange={e => setOffreEssai(e.target.value)} placeholder="ex: 1er cours gratuit" />
           </Field>
+        )}
+      </Section>
+
+      {/* ═══ PHOTOS ═══ */}
+      <Section title="PHOTOS">
+        {/* Photo de couverture actuelle */}
+        <Field label="Photo de couverture">
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+            {currentCover && getPreview(currentCover) ? (
+              <img src={getPreview(currentCover)} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, border: `1.5px solid ${GRAY_LIGHT}` }} />
+            ) : (
+              <div style={{ width: 80, height: 80, borderRadius: 10, border: `1.5px dashed ${GRAY_LIGHT}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: GRAY }}>Aucune</div>
+            )}
+            <label style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 14px', background: SAND, color: NAVY, borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              {uploading ? 'Upload...' : 'Changer la couverture'}
+              <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f, 'couverture') }} />
+            </label>
+          </div>
+        </Field>
+
+        {/* Galerie actuelle */}
+        <Field label="Galerie" hint="JPG, PNG ou WebP — 5 Mo max — 10 photos max">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+            {currentGalerie.map((path, i) => (
+              <div key={`pub-${i}`} style={{ position: 'relative', width: 70, height: 70 }}>
+                {getPreview(path) && <img src={getPreview(path)} alt="" style={{ width: 70, height: 70, objectFit: 'cover', borderRadius: 8, border: `1.5px solid ${GRAY_LIGHT}` }} />}
+              </div>
+            ))}
+            <label style={{ width: 70, height: 70, borderRadius: 8, border: `1.5px dashed ${GRAY_LIGHT}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: GRAY, cursor: 'pointer', fontSize: 22 }}>
+              {uploading ? '...' : '+'}
+              <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f, 'galerie') }} />
+            </label>
+          </div>
+        </Field>
+
+        {/* Photos en attente de modération */}
+        {photos.filter(p => p.status === 'pending').length > 0 && (
+          <div style={{ padding: 12, background: '#FFF7ED', borderRadius: 10, marginTop: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#F59E0B', marginBottom: 8 }}>
+              En attente de validation ({photos.filter(p => p.status === 'pending').length})
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {photos.filter(p => p.status === 'pending').map(p => (
+                <div key={p.id} style={{ position: 'relative', width: 70, height: 70 }}>
+                  {getPreview(p.storage_path) && <img src={getPreview(p.storage_path)} alt="" style={{ width: 70, height: 70, objectFit: 'cover', borderRadius: 8, border: '2px solid #F59E0B', opacity: 0.7 }} />}
+                  <span style={{ position: 'absolute', bottom: 2, left: 2, fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 4, background: '#F59E0B', color: '#fff' }}>
+                    {p.role === 'couverture' ? 'COUV' : 'GAL'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </Section>
 
